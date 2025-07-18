@@ -14,7 +14,6 @@ if __name__ == '__main__':
     with open(map_json, 'r') as f:
         map_data = json.load(f)
 
-    print(map_data["zones"])
     wp_x = map_data["x"]
     wp_y = map_data["y"]
     nl = map_data["e_left"]
