@@ -86,6 +86,7 @@ if __name__ == '__main__':
         x_log.append(car.temporal_state.x)
         y_log.append(car.temporal_state.y)
         v_log.append(u[0])
+        print(car.temporal_state)
 
         # Increment simulation time
         t += car.Ts

@@ -182,6 +182,8 @@ class MPC:
         self.model.spatial_state = self.model.t2s(reference_state=
             self.model.temporal_state, reference_waypoint=
             self.model.current_waypoint)
+        print("spatial_state ey", self.model.spatial_state.e_y)
+        print("current_waypoint", self.model.current_waypoint.x, self.model.current_waypoint.y)
 
         # Initialize optimization problem
         self._init_problem()
