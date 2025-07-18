@@ -100,6 +100,8 @@ class MPC:
             f, A_lin, B_lin = self.model.linearize(v_ref, kappa_ref, delta_s)
             A[(n+1) * self.nx: (n+2)*self.nx, n * self.nx:(n+1)*self.nx] = A_lin
             B[(n+1) * self.nx: (n+2)*self.nx, n * self.nu:(n+1)*self.nu] = B_lin
+            #print("A_lin", A_lin)
+            #print("B_lin", B_lin)
 
             # Set reference for input signal
             ur[n*self.nu:(n+1)*self.nu] = np.array([v_ref, kappa_ref])
@@ -113,16 +115,20 @@ class MPC:
                 umax_dyn[self.nu*n] = vmax_dyn
 
         # Compute dynamic constraints on e_y
-        ub, lb, _ = self.model.reference_path.update_path_constraints(
+        ub, lb, _ = self.model.reference_path.update_path_constraints_2(
                     self.model.wp_id+1, self.N, 2*self.model.safety_margin,
             self.model.safety_margin)
         xmin_dyn[0] = self.model.spatial_state.e_y
         xmax_dyn[0] = self.model.spatial_state.e_y
-        xmin_dyn[self.nx::self.nx] = lb
-        xmax_dyn[self.nx::self.nx] = ub
+        xmin_dyn[self.nx::self.nx] = -lb
+        xmax_dyn[self.nx::self.nx] = abs(ub)
+        print("lb", -lb)
+        print("ub", abs(ub))
 
         # Set reference for state as center-line of drivable area
-        xr[self.nx::self.nx] = (lb + ub) / 2
+        # 可行域中心线作为参考线， N =3
+        xr[self.nx::self.nx] = (-lb + abs(ub)) / 2
+        print("xr", xr)
 
         # Get equality matrix
         Ax = sparse.kron(sparse.eye(self.N + 1),
@@ -133,6 +139,7 @@ class MPC:
         Aineq = sparse.eye((self.N + 1) * self.nx + self.N * self.nu)
         # Combine constraint matrices
         A = sparse.vstack([Aeq, Aineq], format='csc')
+        print("Q.A", self.Q.diagonal())
 
         # Get upper and lower bound vectors for equality constraints
         lineq = np.hstack([xmin_dyn,
@@ -150,9 +157,9 @@ class MPC:
         P = sparse.block_diag([sparse.kron(sparse.eye(self.N), self.Q), self.QN,
              sparse.kron(sparse.eye(self.N), self.R)], format='csc')
         q = np.hstack(
-            [-np.tile(np.diag(self.Q.A), self.N) * xr[:-self.nx],
+            [-np.tile(self.Q.diagonal(), self.N) * xr[:-self.nx],
              -self.QN.dot(xr[-self.nx:]),
-             -np.tile(np.diag(self.R.A), self.N) * ur])
+             -np.tile(self.R.diagonal(), self.N) * ur])
 
         # Initialize optimizer
         self.optimizer = osqp.OSQP()

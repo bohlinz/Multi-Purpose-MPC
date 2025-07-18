@@ -1,7 +1,5 @@
 import numpy as np
 import math
-from map import Map, Obstacle
-from skimage.draw import line_aa
 import matplotlib.pyplot as plt
 from scipy import sparse
 import osqp
@@ -63,8 +61,8 @@ class Waypoint:
 
 
 class ReferencePath:
-    def __init__(self, map, wp_x, wp_y, resolution, smoothing_distance,
-                 max_width, circular):
+    def __init__(self, wp_x, wp_y, resolution, smoothing_distance,
+                 max_width, circular, left_dis, right_dis, s, psi, kappa):
         """
         Reference Path object. Create a reference trajectory from specified
         corner points with given resolution. Smoothing around corners can be
@@ -83,9 +81,6 @@ class ReferencePath:
         # Precision
         self.eps = 1e-12
 
-        # Map
-        self.map = map
-
         # Resolution of the path
         self.resolution = resolution
 
@@ -95,17 +90,28 @@ class ReferencePath:
         # Circular flag
         self.circular = circular
 
-        # List of waypoint objects
-        self.waypoints = self._construct_path(wp_x, wp_y)
-
+        # 方式1： 用自带方法构建，但是会变长度导致左右不匹配    
+        # List of waypoint objects 从xy坐标构建x y theta kappa
+        #self.waypoints = self._construct_path(wp_x, wp_y)
         # Number of waypoints
-        self.n_waypoints = len(self.waypoints)
-
+        #self.n_waypoints = len(self.waypoints)
         # Length of path
-        self.length, self.segment_lengths = self._compute_length()
+        #self.length, self.segment_lengths = self._compute_length()
 
+        #方式2：直接构建
+        self.waypoints = []
+        for i in range(len(wp_x)):
+            self.waypoints.append(Waypoint(wp_x[i], wp_y[i], psi[i], kappa[i]))
+        self.n_waypoints = len(self.waypoints)
+        self.length = s[-1]
+        self.segment_lengths = s
+        
+        # left_l right_l
+        self.left_l = left_dis
+        self.right_l = right_dis
+        
         # Compute path width (attribute of each waypoint)
-        self._compute_width(max_width=max_width)
+        self._compute_width_2(left_dis, right_dis)
 
     def _construct_path(self, wp_x, wp_y):
         """
@@ -239,6 +245,28 @@ class ReferencePath:
             # Set border cells of waypoint
             wp.static_border_cells = (width_info[1], width_info[3])
             wp.dynamic_border_cells = (width_info[1], width_info[3])
+
+    def _compute_width_2(self, left_dis, right_dis):
+
+        # Iterate over all waypoints
+        for i in range(len(self.waypoints)):
+          
+            # Get angle orthogonal to path in current direction
+            angle_left = np.mod(self.waypoints[i].psi + math.pi / 2 + math.pi,
+                              2 * math.pi) - math.pi
+            angle_right = np.mod(self.waypoints[i].psi - math.pi / 2 + math.pi,
+                                 2 * math.pi) - math.pi
+            left_x = self.waypoints[i].x + left_dis[i] * np.cos(angle_left)
+            left_y = self.waypoints[i].y + left_dis[i] * np.sin(angle_right)            
+            right_x = self.waypoints[i].x + right_dis[i] * np.cos(angle_left)
+            right_y = self.waypoints[i].y + right_dis[i] * np.sin(angle_right)                   
+
+            # Set waypoint attributes with width to the left and right
+            self.waypoints[i].ub = left_dis[i]
+            self.waypoints[i].lb = right_dis[i]
+            # Set border cells of waypoint
+            self.waypoints[i].static_border_cells = (left_x, left_y)
+            self.waypoints[i].dynamic_border_cells = (right_x, right_y)
 
     def _get_min_width(self, wp, t_x, t_y, max_width):
         """
@@ -519,6 +547,34 @@ class ReferencePath:
 
         return free_segments
 
+    def _compute_free_segments_2(self, wp, min_width):
+        """
+        用 left_l 和 right_l 计算自由段（不考虑障碍物，直接返回整个区间）
+        :param wp: waypoint object，需有 x, y, psi, left_l, right_l 属性
+        :param min_width: 最小自由段宽度（单位：米）
+        :return: segment candidates as list of tuples (ub_point, lb_point)
+        """
+        # 中心点与朝向
+        x0, y0 = wp.x, wp.y
+        psi = wp.psi
+
+        # 左右边界点（世界坐标）
+        angle_left = np.mod(psi + np.pi / 2 + np.pi, 2 * np.pi) - np.pi
+        angle_right = np.mod(psi - np.pi / 2 + np.pi, 2 * np.pi) - np.pi
+        left_x = x0 + left * np.cos(angle_left)
+        left_y = y0 + left * np.sin(angle_left)
+        right_x = x0 + right * np.cos(angle_right)
+        right_y = y0 + right * np.sin(angle_right)
+
+        # 计算宽度
+        width = np.hypot(left_x - right_x, left_y - right_y)
+
+        free_segments = []
+        if width > min_width:
+            free_segments.append(((left_x, left_y), (right_x, right_y)))
+
+        return free_segments
+
     def update_path_constraints(self, wp_id, N, min_width, safety_margin):
         """
         Compute upper and lower bounds of the drivable area orthogonal to
@@ -646,6 +702,45 @@ class ReferencePath:
             wp.dynamic_border_cells = bound_cells_sm
 
         return np.array(ub_hor), np.array(lb_hor), border_cells_hor_sm
+
+    def update_path_constraints_2(self, start_id, N, min_width, safety_margin):
+        """
+        用 left_l right_l 提供路径约束信息（无障碍物/直接几何边界）
+        :param start_id: 起始 waypoint 索引
+        :param N: 需要的路径点数量
+        :param min_width: 最小宽度
+        :param safety_margin: 安全裕度
+        :return: ub（左边界距离）, lb（右边界距离）, border_cells（每个点的左右边界世界坐标）
+        """
+        import numpy as np
+
+        ub = []
+        lb = []
+        border_cells = []
+
+        for i in range(start_id, start_id + N):
+            wp = self.waypoints[i % self.n_waypoints]
+            # 左右边界距离（考虑安全裕度和最小宽度）
+            #print(self.left_l[i])
+            #print(self.right_l[i])
+            left = max(self.left_l[i] - safety_margin, min_width)
+            right = max(-self.right_l[i] - safety_margin, min_width)
+
+            # 角度
+            angle_left = np.mod(wp.psi + np.pi / 2 + np.pi, 2 * np.pi) - np.pi
+            angle_right = np.mod(wp.psi - np.pi / 2 + np.pi, 2 * np.pi) - np.pi
+
+            # 左右边界点（世界坐标）
+            left_x = wp.x + left * np.cos(angle_left)
+            left_y = wp.y + left * np.sin(angle_left)
+            right_x = wp.x - right * np.cos(angle_right)
+            right_y = wp.y - right * np.sin(angle_right)
+
+            ub.append(left)
+            lb.append(right)
+            border_cells.append(((left_x, left_y), (right_x, right_y)))
+
+        return np.array(ub), np.array(lb), border_cells
 
 
 if __name__ == '__main__':
