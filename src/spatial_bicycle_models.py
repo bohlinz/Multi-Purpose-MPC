@@ -395,6 +395,10 @@ class BicycleModel(SpatialBicycleModel):
         :param kappa_ref: kappa of waypoint around which to linearize
         :param delta_s: distance between current waypoint and next waypoint
          """
+         # 这是线性化+离散化之后的结果
+         # delta_s = ts * v, ts是采样时间，v是参考速度
+         # https://kth.diva-portal.org/smash/get/diva2:1169480/FULLTEXT01.pdf   eq(15)
+         # 线性化的点在 e_y = 0, e_psi = 0
 
         ###################
         # System Matrices #

@@ -77,7 +77,7 @@ class MPC:
         xr = np.zeros(self.nx*(self.N+1))
         # Offset for equality constraint (due to B * (u - ur))
         uq = np.zeros(self.N * self.nx)
-        # Dynamic state constraints
+        # Dynamic state constraints  # 时变的状态硬约束
         xmin_dyn = np.kron(np.ones(self.N + 1), xmin)
         xmax_dyn = np.kron(np.ones(self.N + 1), xmax)
         # Dynamic input constraints
