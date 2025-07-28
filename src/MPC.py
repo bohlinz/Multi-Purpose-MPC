@@ -13,7 +13,7 @@ PREDICTION = '#BA4A00'
 
 class MPC:
     def __init__(self, model, N, Q, R, QN, StateConstraints, InputConstraints,
-                 ay_max):
+                 ay_max, R_lin=None):
         """
         Constructor for the Model Predictive Controller.
         :param model: bicycle model object to be controlled
@@ -24,6 +24,7 @@ class MPC:
         :param StateConstraints: dictionary of state constraints
         :param InputConstraints: dictionary of input constraints
         :param ay_max: maximum allowed lateral acceleration in curves
+        :param R_lin: linear cost terms for inputs (optional)
         """
 
         # Parameters
@@ -31,6 +32,7 @@ class MPC:
         self.Q = Q  # weight matrix state vector
         self.R = R  # weight matrix input vector
         self.QN = QN  # weight matrix terminal
+        self.R_lin = R_lin if R_lin is not None else np.zeros(2)  # linear cost terms for inputs
 
         # Model
         self.model = model
@@ -152,7 +154,7 @@ class MPC:
         q = np.hstack(
             [-np.tile(np.diag(self.Q.toarray()), self.N) * xr[:-self.nx],
              -self.QN.dot(xr[-self.nx:]),
-             -np.tile(np.diag(self.R.toarray()), self.N) * ur])
+             -np.tile(np.diag(self.R.toarray()), self.N) * ur + np.tile(self.R_lin, self.N)]) # 注意符号
 
         # Initialize optimizer
         self.optimizer = osqp.OSQP()

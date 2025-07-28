@@ -98,9 +98,16 @@ if __name__ == '__main__':
     ##############
 
     N = 30
-    Q = sparse.diags([0.1, 0.0, 0.0]) # e_y的二次项为0.1弱路径跟踪
+    Q = sparse.diags([0.1, 0.0, 0.0]) # e_y的二次项为0.1弱路径跟踪， 直接使用第三项时间cost也可以达到time_opt的目的
     R = sparse.diags([0.0, 0.0])  # v-v_ref的二次项为0,表征弱速度跟踪
-    QN = sparse.diags([1.0, 0.0, 0.0])
+    R_lin = np.array([-0.5, 0.0])  # 速度的线性项为-1.0，鼓励更快的速度（负值表示奖励高速度）
+    QN = sparse.diags([0.2, 0.0, 0.0])
+
+    #结论：
+    #1) 走中心线： Q 0.1 R 0.1 9.45s
+    #2) 走时间最短： Q 0.1 0.0 0.1 R 0.0 0.0  8.45s但是会有无解的情况
+    #3）按速度鼓励配置： Q 0.1 0.0 0.0 R 0.0 0.0 R_lin -0.1 0.0 9.65s 看起来一直在走外圈
+    # 原因是因为转向上下界被kappa_ref锁住了要打开才行
 
     v_max = 1.0  # m/s
     delta_max = 0.66  # rad
@@ -109,7 +116,7 @@ if __name__ == '__main__':
                         'umax': np.array([v_max, np.tan(delta_max)/car.length])}
     StateConstraints = {'xmin': np.array([-np.inf, -np.inf, -np.inf]),
                         'xmax': np.array([np.inf, np.inf, np.inf])}
-    mpc = MPC(car, N, Q, R, QN, StateConstraints, InputConstraints, ay_max)
+    mpc = MPC(car, N, Q, R, QN, StateConstraints, InputConstraints, ay_max, R_lin)
 
     # Compute speed profile
     a_min = -0.1  # m/s^2
