@@ -150,9 +150,9 @@ class MPC:
         P = sparse.block_diag([sparse.kron(sparse.eye(self.N), self.Q), self.QN,
              sparse.kron(sparse.eye(self.N), self.R)], format='csc')
         q = np.hstack(
-            [-np.tile(np.diag(self.Q.A), self.N) * xr[:-self.nx],
+            [-np.tile(np.diag(self.Q.toarray()), self.N) * xr[:-self.nx],
              -self.QN.dot(xr[-self.nx:]),
-             -np.tile(np.diag(self.R.A), self.N) * ur])
+             -np.tile(np.diag(self.R.toarray()), self.N) * ur])
 
         # Initialize optimizer
         self.optimizer = osqp.OSQP()
