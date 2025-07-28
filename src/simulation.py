@@ -35,7 +35,7 @@ if __name__ == '__main__':
                                        circular=True)
 
         # Add obstacles
-        use_obstacles = True
+        use_obstacles = False
         if use_obstacles:
             obs1 = Obstacle(cx=0.0, cy=0.0, radius=0.05)
             obs2 = Obstacle(cx=-0.8, cy=-0.5, radius=0.08)
