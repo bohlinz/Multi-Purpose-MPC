@@ -98,8 +98,8 @@ if __name__ == '__main__':
     ##############
 
     N = 30
-    Q = sparse.diags([1.0, 0.0, 0.0])
-    R = sparse.diags([0.5, 0.0])
+    Q = sparse.diags([0.1, 0.0, 0.0]) # e_y的二次项为0.1弱路径跟踪
+    R = sparse.diags([0.0, 0.0])  # v-v_ref的二次项为0,表征弱速度跟踪
     QN = sparse.diags([1.0, 0.0, 0.0])
 
     v_max = 1.0  # m/s
